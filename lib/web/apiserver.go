@@ -441,7 +441,7 @@ func (m *Handler) getConfigurationSettings(w http.ResponseWriter, r *http.Reques
 }
 
 func (m *Handler) oidcLoginWeb(w http.ResponseWriter, r *http.Request, p httprouter.Params) (interface{}, error) {
-	log.Infof("oidcLoginWeb start")
+	log.Infof("%v oidcLoginWeb start: %v", time.Now(), r.URL.Query())
 	query := r.URL.Query()
 	clientRedirectURL := query.Get("redirect_url")
 	if clientRedirectURL == "" {
@@ -495,7 +495,7 @@ func (m *Handler) oidcLoginConsole(w http.ResponseWriter, r *http.Request, p htt
 }
 
 func (m *Handler) oidcCallback(w http.ResponseWriter, r *http.Request, p httprouter.Params) (interface{}, error) {
-	log.Infof("oidcCallback start")
+	log.Infof("%v oidcCallback start: %v", time.Now(), r.URL.Query())
 	response, err := m.cfg.ProxyClient.ValidateOIDCAuthCallback(r.URL.Query())
 	if err != nil {
 		log.Infof("VALIDATE error: %v", err)

@@ -744,6 +744,7 @@ func (s *AuthServer) CreateOIDCAuthRequest(req services.OIDCAuthRequest) (*servi
 		return nil, trace.Wrap(err)
 	}
 	req.StateToken = token
+	log.Debugf("%v [CreateOIDCAuthRequest]: StateToken: %v", time.Now(), token)
 
 	oauthClient, err := oidcClient.OAuthClient()
 	if err != nil {
@@ -755,8 +756,10 @@ func (s *AuthServer) CreateOIDCAuthRequest(req services.OIDCAuthRequest) (*servi
 
 	err = s.Identity.CreateOIDCAuthRequest(req, defaults.OIDCAuthRequestTTL)
 	if err != nil {
+		log.Debugf("%v [CreateOIDCAuthRequest]: unexpected response from s.Identity.CreateOIDCAuthRequest(%v): %v", time.Now(), token, err)
 		return nil, trace.Wrap(err)
 	}
+	log.Debugf("%v [CreateOIDCAuthRequest]: success", time.Now())
 	return &req, nil
 }
 
@@ -1028,9 +1031,11 @@ func (a *AuthServer) ValidateOIDCAuthCallback(q url.Values) (*OIDCAuthResponse, 
 		return nil, trace.OAuth2(
 			oauth2.ErrorInvalidRequest, "missing state query param", q)
 	}
+	log.Debugf("%v [ValidateOIDCAuthCallback]: stateToken: %v", time.Now(), stateToken)
 
 	req, err := a.Identity.GetOIDCAuthRequest(stateToken)
 	if err != nil {
+		log.Debugf("%v [ValidateOIDCAuthCallback]: unexpected response from a.Identity.GetOIDCAuthRequest(%v): %v", time.Now(), stateToken, err)
 		return nil, trace.Wrap(err)
 	}
 
