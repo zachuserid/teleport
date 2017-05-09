@@ -456,7 +456,7 @@ func (o *OIDCConnectorV2) RoleFromTemplate(claims jose.Claims) (Role, error) {
 		}
 	}
 
-	return nil, trace.Errorf("unable to create role from template")
+	return nil, trace.Errorf("no matching mapping, claims: %v, claims_to_roles: %v", claims, o.Spec.ClaimsToRoles)
 }
 
 // Check returns nil if all parameters are great, err otherwise
