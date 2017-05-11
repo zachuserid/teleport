@@ -1049,8 +1049,8 @@ func (a *AuthServer) buildSAMLRoles(connector services.SAMLConnector, assertionI
 	if len(roles) == 0 {
 		role, err := connector.RoleFromTemplate(assertionInfo)
 		if err != nil {
-			log.Warningf("[SAML] Unable to map claims to roles or role templates for %q", connector.GetName())
-			return nil, trace.AccessDenied("unable to map claims to roles or role templates for %q", connector.GetName())
+			log.Warningf("[SAML] Unable to map claims to roles or role templates for %q: %v", connector.GetName(), err)
+			return nil, trace.AccessDenied("unable to map claims to roles or role templates for %q: %v", connector.GetName(), err)
 		}
 
 		// figure out ttl for role. expires = now + ttl  =>  ttl = expires - now

@@ -14,6 +14,7 @@ limitations under the License.
 package utils
 
 import (
+	"bytes"
 	"crypto"
 	"crypto/ecdsa"
 	"crypto/rand"
@@ -21,6 +22,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
+	"fmt"
 	"math/big"
 	"time"
 
@@ -93,6 +95,10 @@ func GenerateSelfSignedSigningCert(entity pkix.Name, dnsNames []string, ttl time
 
 	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(priv)})
 	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: derBytes})
+
+	var buf bytes.Buffer
+	pem.Encode(&buf, &pem.Block{Type: "CERTIFICATE", Bytes: derBytes})
+	fmt.Printf("buf.Bytes(): %v\n", string(buf.Bytes()))
 
 	return keyPEM, certPEM, nil
 }

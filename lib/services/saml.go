@@ -392,6 +392,7 @@ func (o *SAMLConnectorV2) MapAttributes(assertionInfo saml2.AssertionInfo) []str
 				continue
 			}
 			for _, value := range attr.Values {
+				fmt.Printf("attr.Name: %v, attr.Value: %v, mapping.Name: %v, mapping.Value: %v\n", attr.Name, attr.Values, mapping.Name, mapping.Value)
 				if value.Value == mapping.Value {
 					roles = append(roles, mapping.Roles...)
 				}
@@ -576,6 +577,12 @@ func (o *SAMLConnectorV2) GetServiceProvider() (*saml2.SAMLServiceProvider, erro
 		}
 	}
 	log.Debugf("SSO: %v\nIssuer:%v,acs:%v", o.Spec.SSO, o.Spec.Issuer, o.Spec.AssertionConsumerService)
+
+	rac := &saml2.RequestedAuthnContext{
+		Comparison: "minimum",
+		Contexts:   []string{"urn:oasis:names:tc:SAML:2.0:ac:classes:PasswordProtectedTransport"},
+	}
+
 	sp := &saml2.SAMLServiceProvider{
 		IdentityProviderSSOURL:      o.Spec.SSO,
 		IdentityProviderIssuer:      o.Spec.Issuer,
@@ -585,6 +592,7 @@ func (o *SAMLConnectorV2) GetServiceProvider() (*saml2.SAMLServiceProvider, erro
 		AudienceURI:                 o.Spec.Audience,
 		IDPCertificateStore:         &certStore,
 		SPKeyStore:                  keyStore,
+		RequestedAuthnContext:       rac,
 	}
 	return sp, nil
 }

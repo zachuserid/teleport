@@ -24,11 +24,12 @@ type SigningContext struct {
 
 func NewDefaultSigningContext(ks X509KeyStore) *SigningContext {
 	return &SigningContext{
-		Hash:          crypto.SHA256,
-		KeyStore:      ks,
-		IdAttribute:   DefaultIdAttr,
-		Prefix:        DefaultPrefix,
-		Canonicalizer: MakeC14N11Canonicalizer(),
+		Hash:        crypto.SHA256,
+		KeyStore:    ks,
+		IdAttribute: DefaultIdAttr,
+		Prefix:      DefaultPrefix,
+		//Canonicalizer: MakeC14N11Canonicalizer(),
+		Canonicalizer: MakeC14N10ExclusiveCanonicalizerWithPrefixList(DefaultPrefix),
 	}
 }
 
@@ -205,7 +206,14 @@ func (ctx *SigningContext) SignEnveloped(el *etree.Element) (*etree.Element, err
 	}
 
 	ret := el.Copy()
-	ret.Child = append(ret.Child, sig)
+
+	var children []etree.Token
+	children = append(children, ret.Child[0])
+	children = append(children, sig)
+	children = append(children, ret.Child[1:]...)
+	ret.Child = children
 
 	return ret, nil
 }
+
+//ret.Child = append(ret.Child, sig)

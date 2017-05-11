@@ -75,6 +75,8 @@ func (sp *SAMLServiceProvider) BuildAuthRequest() (string, error) {
 	if err != nil {
 		return "", err
 	}
+	s, e := doc.WriteToString()
+	fmt.Printf("s: %v, e: %v\n", s, e)
 	return doc.WriteToString()
 }
 
@@ -95,6 +97,8 @@ func (sp *SAMLServiceProvider) BuildAuthURLFromDocument(relayState string, doc *
 	if err != nil {
 		return "", fmt.Errorf("flate NewWriter error: %v", err)
 	}
+
+	fmt.Printf("authnRequest: %v\n", string(authnRequest))
 
 	_, err = fw.Write([]byte(authnRequest))
 	if err != nil {
