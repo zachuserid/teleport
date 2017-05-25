@@ -18,14 +18,24 @@ limitations under the License.
 package state
 
 import (
+	"context"
+	"crypto/tls"
+	"fmt"
 	"io"
+	"io/ioutil"
 	"sync"
 	"time"
 
 	log "github.com/Sirupsen/logrus"
+	"github.com/gravitational/teleport/lib/auth/api"
+	"github.com/gravitational/teleport/lib/auth/api/protogen"
 	"github.com/gravitational/teleport/lib/events"
 	"github.com/gravitational/teleport/lib/session"
 	"github.com/gravitational/trace"
+
+	"github.com/codahale/hdrhistogram"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 )
 
 var (
@@ -35,7 +45,7 @@ var (
 const (
 	// MaxQueueSize determines how many logging events to queue in-memory
 	// before start dropping them (probably because logging server is down)
-	MaxQueueSize = 10
+	MaxQueueSize = 1000
 )
 
 // CachingAuditLog implements events.IAuditLog on the recording machine (SSH server)
@@ -45,6 +55,7 @@ type CachingAuditLog struct {
 	queue     chan msg
 	closeC    chan int
 	closeOnce sync.Once
+	client    protogen.AuditClient
 }
 
 // msg structure is used to transfer logging calls from the calling thread into
@@ -59,9 +70,24 @@ type msg struct {
 
 // MakeCachingAuditLog creaets a new & fully initialized instance of the alog
 func MakeCachingAuditLog(logServer events.IAuditLog) *CachingAuditLog {
+
+	creds := credentials.NewTLS(&tls.Config{
+		InsecureSkipVerify: true,
+	})
+	conn, err := grpc.Dial("127.0.0.1:3089", grpc.WithTransportCredentials(creds), grpc.WithBlock(), grpc.WithTimeout(100*time.Second))
+	if err != nil {
+		panic(err)
+	}
+
+	client, err := api.NewClient(conn)
+	if err != nil {
+		panic(err)
+	}
+
 	ll := &CachingAuditLog{
 		server: logServer,
 		closeC: make(chan int),
+		client: client,
 	}
 	// start the queue:
 	if logServer != nil {
@@ -74,7 +100,13 @@ func MakeCachingAuditLog(logServer events.IAuditLog) *CachingAuditLog {
 // run thread is picking up logging events and tries to forward them
 // to the logging server
 func (ll *CachingAuditLog) run() {
-	var err error
+	clt, err := ll.client.SessionChunks(context.TODO())
+	if err != nil {
+		panic(err)
+	}
+	hist := hdrhistogram.New(1, 60000, 3)
+	requests := 0
+	lastReport := time.Now()
 	for ll.server != nil {
 		select {
 		case <-ll.closeC:
@@ -83,7 +115,29 @@ func (ll *CachingAuditLog) run() {
 			if msg.fields != nil {
 				err = ll.server.EmitAuditEvent(msg.eventType, msg.fields)
 			} else if msg.reader != nil {
-				err = ll.server.PostSessionChunk(msg.namespace, msg.sid, msg.reader)
+				bytes, err := ioutil.ReadAll(msg.reader)
+				if err != nil {
+					log.Warnf("%v", err)
+				}
+				start := time.Now()
+				err = clt.Send(&protogen.SessionChunk{Namespace: msg.namespace, SessionID: string(msg.sid), Chunk: bytes})
+				if err != nil {
+					log.Warnf("%v", err)
+				}
+				requests += 1
+				hist.RecordValue(int64(time.Now().Sub(start) / time.Microsecond))
+				if time.Now().Sub(lastReport) > 10*time.Second {
+					diff := time.Now().Sub(lastReport) / time.Second
+					lastReport = time.Now()
+					fmt.Printf("client histogram\n")
+					for _, quantile := range []float64{25, 50, 75, 90, 95, 99, 100} {
+						fmt.Printf("%v\t%v microseconds\n", quantile, hist.ValueAtQuantile(quantile))
+					}
+					fmt.Printf("%v requests/sec\n", requests/int(diff))
+
+				}
+				//err = ll.server.PostSessionChunk(msg.namespace, msg.sid, msg.reader)
+
 			}
 			if err != nil {
 				log.Error(err)
@@ -96,7 +150,7 @@ func (ll *CachingAuditLog) post(m msg) error {
 	select {
 	case ll.queue <- m:
 	default:
-		log.Warnf("Audit log cannot keep up. Dropping event '%v'", m.eventType)
+		//log.Warnf("Audit log cannot keep up. Dropping event '%v' queue length %v", m.eventType, len(ll.queue))
 	}
 	return nil
 

@@ -68,6 +68,7 @@ import (
 	"github.com/gravitational/teleport/lib/utils"
 
 	log "github.com/Sirupsen/logrus"
+	"github.com/codahale/hdrhistogram"
 	"github.com/gravitational/trace"
 )
 
@@ -110,6 +111,8 @@ type AuditLog struct {
 
 	// same as time.Now(), but helps with testing
 	TimeSource TimeSourceFunc
+
+	hist *hdrhistogram.Histogram
 }
 
 // BaseSessionLogger implements the common features of a session logger. The imporant
@@ -211,16 +214,28 @@ func NewAuditLog(dataDir string) (IAuditLog, error) {
 	if err := os.MkdirAll(sessionDir, 0770); err != nil {
 		return nil, trace.Wrap(err)
 	}
+
 	al := &AuditLog{
 		loggers:        make(map[session.ID]*SessionLogger, 0),
 		dataDir:        dataDir,
 		RotationPeriod: defaults.LogRotationPeriod,
 		TimeSource:     time.Now,
+		hist:           hdrhistogram.New(1, 60000, 3),
 	}
 	if err := al.migrateSessions(); err != nil {
 		return nil, trace.Wrap(err)
 	}
+	go al.report()
 	return al, nil
+}
+
+func (l *AuditLog) report() {
+	for range time.Tick(10 * time.Second) {
+		fmt.Printf("server histogram\n")
+		for _, quantile := range []float64{25, 50, 75, 90, 95, 99, 100} {
+			fmt.Printf("%v\t%v microseconds\n", quantile, l.hist.ValueAtQuantile(quantile))
+		}
+	}
 }
 
 func (l *AuditLog) migrateSessions() error {
@@ -259,8 +274,10 @@ func (l *AuditLog) PostSessionChunk(namespace string, sid session.ID, reader io.
 		log.Warnf("audit.log: no session writer for %s", sid)
 		return nil
 	}
+	start := time.Now()
 	tmp, err := utils.ReadAll(reader, 16*1024)
 	_, err = sl.Write(tmp)
+	l.hist.RecordValue(int64(time.Now().Sub(start) / time.Microsecond))
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -568,6 +585,7 @@ func (l *AuditLog) LoggerFor(namespace string, sid session.ID) (sl *SessionLogge
 	if ok {
 		return sl, nil
 	}
+	log.Warningf("createing logger for %v", sid)
 	// make sure session logs dir is present
 	sdir := filepath.Join(l.dataDir, SessionLogsDir, namespace)
 	if err := os.MkdirAll(sdir, 0770); err != nil {

@@ -32,6 +32,8 @@ import (
 
 	"github.com/gravitational/teleport"
 	"github.com/gravitational/teleport/lib/auth"
+	"github.com/gravitational/teleport/lib/auth/api"
+	"github.com/gravitational/teleport/lib/auth/api/protogen"
 	"github.com/gravitational/teleport/lib/auth/native"
 	"github.com/gravitational/teleport/lib/backend"
 	"github.com/gravitational/teleport/lib/backend/boltbk"
@@ -54,6 +56,8 @@ import (
 	"github.com/jonboulle/clockwork"
 	"github.com/pborman/uuid"
 	"golang.org/x/crypto/ssh"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 )
 
 const (
@@ -100,7 +104,8 @@ type TeleportProcess struct {
 	Config *Config
 	// localAuth has local auth server listed in case if this process
 	// has started with auth server role enabled
-	localAuth *auth.AuthServer
+	localAuth     *auth.AuthServer
+	localAuditLog events.IAuditLog
 
 	// identities of this process (credentials to auth sever, basically)
 	Identities map[teleport.Role]*auth.Identity
@@ -283,6 +288,18 @@ func (process *TeleportProcess) getLocalAuth() *auth.AuthServer {
 	return process.localAuth
 }
 
+func (process *TeleportProcess) setLocalAuditLog(l events.IAuditLog) {
+	process.Lock()
+	defer process.Unlock()
+	process.localAuditLog = l
+}
+
+func (process *TeleportProcess) getLocalAuditLog() events.IAuditLog {
+	process.Lock()
+	defer process.Unlock()
+	return process.localAuditLog
+}
+
 // initAuthService can be called to initialize auth server service
 func (process *TeleportProcess) initAuthService(authority auth.Authority) error {
 	var (
@@ -309,6 +326,7 @@ func (process *TeleportProcess) initAuthService(authority auth.Authority) error 
 			return trace.Wrap(err)
 		}
 	}
+	process.setLocalAuditLog(auditLog)
 
 	// first, create the AuthServer
 	authServer, identity, err := auth.Init(auth.InitConfig{
@@ -661,6 +679,28 @@ func (process *TeleportProcess) initProxy() error {
 	return nil
 }
 
+// SetupTLS sets up some modern suites, preference, and min TLS versions
+func SetupTLS(config *tls.Config) {
+	config.CipherSuites = []uint16{
+		tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+		tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+
+		tls.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA,
+		tls.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA,
+
+		tls.TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA,
+		tls.TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA,
+
+		tls.TLS_RSA_WITH_AES_256_CBC_SHA,
+		tls.TLS_RSA_WITH_AES_128_CBC_SHA,
+	}
+
+	config.MinVersion = tls.VersionTLS12
+	config.SessionTicketsDisabled = false
+	config.ClientSessionCache = tls.NewLRUClientSessionCache(
+		1024)
+}
+
 func (process *TeleportProcess) initProxyEndpoint(conn *Connector) error {
 	var (
 		askedToExit = true
@@ -787,6 +827,29 @@ func (process *TeleportProcess) initProxyEndpoint(conn *Connector) error {
 	} else {
 		log.Infof("[WEB] Web UI is disabled")
 	}
+
+	process.RegisterFunc(func() error {
+		tlsConfig, err := utils.CreateTLSConfiguration(cfg.Proxy.TLSCert, cfg.Proxy.TLSKey)
+		if err != nil {
+			return trace.Wrap(err)
+		}
+		tlsConfig.ClientAuth = tls.NoClientCert
+
+		SetupTLS(tlsConfig)
+
+		localServer, err := api.NewServer(process.getLocalAuditLog())
+		if err != nil {
+			return trace.Wrap(err)
+		}
+		grpcServer := grpc.NewServer(grpc.Creds(credentials.NewTLS(tlsConfig)))
+		protogen.RegisterAuditServer(grpcServer, localServer)
+
+		listener, err := net.Listen("tcp", "127.0.0.1:3089")
+		if err != nil {
+			return trace.Wrap(err)
+		}
+		return trace.Wrap(grpcServer.Serve(listener))
+	})
 
 	// Register ssh proxy server
 	process.RegisterFunc(func() error {

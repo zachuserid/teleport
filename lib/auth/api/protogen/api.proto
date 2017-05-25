@@ -1,0 +1,26 @@
+syntax = "proto3";
+package protogen;
+
+import "github.com/grpc-ecosystem/grpc-gateway/third_party/googleapis/google/api/annotations.proto";
+import "google/protobuf/empty.proto";
+
+
+
+// SessionChunk is a chunk to be posted in the context of the session
+message SessionChunk {
+    // Namespace is session namespace
+	string Namespace = 1;
+	// SessionID is session ID
+	string SessionID = 2;
+    // Chunk is a session chunk
+    bytes Chunk = 3;
+}
+
+message Chunks {
+    repeated SessionChunk Chunks = 1;
+}
+
+service Audit {
+    rpc SessionChunks(stream Chunks) returns (google.protobuf.Empty) {
+    }
+}
