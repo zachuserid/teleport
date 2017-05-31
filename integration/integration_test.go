@@ -139,7 +139,7 @@ func (s *IntSuite) TestAudit(c *check.C) {
 	endC := make(chan error, 0)
 	myTerm := NewTerminal(250)
 	go func() {
-		cl, err := t.NewClient(s.me.Username, Site, Host, t.GetPortSSHInt())
+		cl, err := t.NewClient(s.me.Username, Site, Host, t.GetPortSSHInt(), false)
 		c.Assert(err, check.IsNil)
 		cl.Stdout = &myTerm
 		cl.Stdin = &myTerm
@@ -291,7 +291,7 @@ func (s *IntSuite) TestInteractive(c *check.C) {
 
 	// PersonA: SSH into the server, wait one second, then type some commands on stdin:
 	openSession := func() {
-		cl, err := t.NewClient(s.me.Username, Site, Host, t.GetPortSSHInt())
+		cl, err := t.NewClient(s.me.Username, Site, Host, t.GetPortSSHInt(), false)
 		c.Assert(err, check.IsNil)
 		cl.Stdout = &personA
 		cl.Stdin = &personA
@@ -314,7 +314,7 @@ func (s *IntSuite) TestInteractive(c *check.C) {
 			sessionID = string(sessions[0].ID)
 			break
 		}
-		cl, err := t.NewClient(s.me.Username, Site, Host, t.GetPortSSHInt())
+		cl, err := t.NewClient(s.me.Username, Site, Host, t.GetPortSSHInt(), false)
 		c.Assert(err, check.IsNil)
 		cl.Stdout = &personB
 		for i := 0; i < 10; i++ {
@@ -348,7 +348,7 @@ func (s *IntSuite) TestEnvironmentVariables(c *check.C) {
 	cmd := []string{"printenv", testKey}
 
 	// make sure sessions set run command
-	tc, err := t.NewClient(s.me.Username, Site, Host, t.GetPortSSHInt())
+	tc, err := t.NewClient(s.me.Username, Site, Host, t.GetPortSSHInt(), false)
 	c.Assert(err, check.IsNil)
 
 	tc.Env = map[string]string{testKey: testVal}
@@ -370,7 +370,7 @@ func (s *IntSuite) TestInvalidLogins(c *check.C) {
 	cmd := []string{"echo", "success"}
 
 	// try the wrong site:
-	tc, err := t.NewClient(s.me.Username, "wrong-site", Host, t.GetPortSSHInt())
+	tc, err := t.NewClient(s.me.Username, "wrong-site", Host, t.GetPortSSHInt(), false)
 	c.Assert(err, check.IsNil)
 	err = tc.SSH(context.TODO(), cmd, false)
 	c.Assert(err, check.ErrorMatches, "cluster wrong-site not found")
@@ -415,7 +415,7 @@ func (s *IntSuite) TestTwoClusters(c *check.C) {
 	cmd := []string{"echo", "hello world"}
 
 	// directly:
-	tc, err := a.NewClient(username, "site-A", Host, sshPort)
+	tc, err := a.NewClient(username, "site-A", Host, sshPort, false)
 	tc.Stdout = &outputA
 	c.Assert(err, check.IsNil)
 	err = tc.SSH(context.TODO(), cmd, false)
@@ -423,7 +423,7 @@ func (s *IntSuite) TestTwoClusters(c *check.C) {
 	c.Assert(outputA.String(), check.Equals, "hello world\n")
 
 	// via tunnel b->a:
-	tc, err = b.NewClient(username, "site-A", Host, sshPort)
+	tc, err = b.NewClient(username, "site-A", Host, sshPort, false)
 	tc.Stdout = &outputB
 	c.Assert(err, check.IsNil)
 	err = tc.SSH(context.TODO(), cmd, false)
@@ -488,7 +488,7 @@ func (s *IntSuite) TestHA(c *check.C) {
 	}
 
 	cmd := []string{"echo", "hello world"}
-	tc, err := b.NewClient(username, "cluster-a", "127.0.0.1", sshPort)
+	tc, err := b.NewClient(username, "cluster-a", "127.0.0.1", sshPort, false)
 	c.Assert(err, check.IsNil)
 	output := &bytes.Buffer{}
 	tc.Stdout = output
@@ -611,7 +611,7 @@ func (s *IntSuite) TestMapRoles(c *check.C) {
 	}
 
 	cmd := []string{"echo", "hello world"}
-	tc, err := main.NewClient(username, clusterAux, "127.0.0.1", sshPort)
+	tc, err := main.NewClient(username, clusterAux, "127.0.0.1", sshPort, false)
 	c.Assert(err, check.IsNil)
 	output := &bytes.Buffer{}
 	tc.Stdout = output

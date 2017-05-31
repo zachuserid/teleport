@@ -459,7 +459,7 @@ func (i *TeleInstance) Start() (err error) {
 
 // NewClient returns a fully configured and pre-authenticated client
 // (pre-authenticated with server CAs and signed session key)
-func (i *TeleInstance) NewClient(login string, site string, host string, port int) (tc *client.TeleportClient, err error) {
+func (i *TeleInstance) NewClient(login string, site string, host string, port int, interactive bool) (tc *client.TeleportClient, err error) {
 	keyDir, err := ioutil.TempDir(i.Config.DataDir, "tsh")
 	if err != nil {
 		return nil, err
@@ -491,6 +491,7 @@ func (i *TeleInstance) NewClient(login string, site string, host string, port in
 		InsecureSkipVerify: true,
 		KeysDir:            keyDir,
 		SiteName:           site,
+		Interactive:        interactive,
 	}
 	cconf.SetProxy(proxyHost, proxyWebPort, proxySSHPort)
 
