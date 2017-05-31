@@ -353,6 +353,15 @@ func onSSH(cf *CLIConf) {
 		utils.FatalError(err)
 	}
 
+	_, err = tc.NonInteractiveLogin()
+	fmt.Printf("tc.NonInteractiveLogin: err: %v\n", err)
+	_, err = tc.InteractiveLogin()
+	fmt.Printf("tc.InteractiveLogin: err: %v\n", err)
+
+	// update current profile
+	err = tc.SaveProfile("")
+	fmt.Printf("tc.SaveProfile: err: %v\n", err)
+
 	tc.Stdin = os.Stdin
 	if err = tc.SSH(context.TODO(), cf.RemoteCommand, cf.LocalExec); err != nil {
 		// exit with the same exit status as the failed command:

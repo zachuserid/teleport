@@ -903,6 +903,42 @@ func (tc *TeleportClient) authMethods() []ssh.AuthMethod {
 	return m
 }
 
+// nonInteractiveLogin
+func (tc *TeleportClient) NonInteractiveLogin() (*ssh.Client, error) {
+	proxyPrincipal := tc.getProxySSHPrincipal()
+	proxyAddr := tc.Config.ProxySSHHostPort()
+	sshConfig := &ssh.ClientConfig{
+		User:            proxyPrincipal,
+		HostKeyCallback: tc.HostKeyCallback,
+	}
+
+	var err error
+	var sshClient *ssh.Client
+
+	for i, m := range tc.authMethods() {
+		log.Infof("[CLIENT] connecting proxy=%v login='%v' method=%d", proxyAddr, sshConfig.User, i)
+
+		sshConfig.Auth = []ssh.AuthMethod{m}
+		sshClient, err = ssh.Dial("tcp", proxyAddr, sshConfig)
+		if err != nil {
+			if utils.IsHandshakeFailedError(err) {
+				log.Warn(err)
+				continue
+			}
+			return nil, trace.Wrap(err)
+		}
+
+		break
+	}
+	log.Infof("[CLIENT] successful auth with proxy %v", proxyAddr)
+	return sshClient, nil
+}
+
+// interactiveLogin
+func (tc *TeleportClient) InteractiveLogin() (*CertAuthMethod, error) {
+	return tc.Login()
+}
+
 // ConnectToProxy dials the proxy server and returns ProxyClient if successful
 func (tc *TeleportClient) ConnectToProxy() (*ProxyClient, error) {
 	proxyPrincipal := tc.getProxySSHPrincipal()
